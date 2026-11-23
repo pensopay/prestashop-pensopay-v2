@@ -1,6 +1,9 @@
 <?php
-$config = new PrestaShop\CodingStandards\CsFixer\Config();
-$config->setUsingCache(true)->getFinder()
+
+$finder = PhpCsFixer\Finder::create()
     ->in(__DIR__)
     ->exclude(['vendor', 'translations']);
-return $config;
+
+return (new PrestaShop\CodingStandards\CsFixer\Config())
+    ->setUsingCache(true)
+    ->setFinder($finder);

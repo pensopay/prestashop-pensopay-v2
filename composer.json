@@ -28,7 +28,16 @@
   "scripts": {
     "lint": "php-cs-fixer fix --dry-run --diff",
     "lint:fix": "php-cs-fixer fix",
-    "stan": "phpstan analyse --memory-limit=1G",
+    "stan": [
+      "Composer\\Config::disableProcessTimeout",
+      "docker run --rm -v \"$PWD\":/var/www/html/modules/pensopay:ro -w /var/www/html/modules/pensopay -e _PS_ROOT_DIR_=/var/www/html --entrypoint php prestashop/prestashop:${PS_VERSION:-8.1} vendor/bin/phpstan analyse --memory-limit=1G"
+    ],
     "test": "phpunit"
+  },
+  "scripts-descriptions": {
+    "lint": "Check code style (PHP-CS-Fixer, PrestaShop rules)",
+    "lint:fix": "Fix code style",
+    "stan": "Run PHPStan inside the prestashop/prestashop Docker image (override version with PS_VERSION)",
+    "test": "Run unit tests (PHPUnit)"
   }
 }

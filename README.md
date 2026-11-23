@@ -30,14 +30,16 @@ composer install
 |---|---|
 | `composer lint` | Checks code style (PHP-CS-Fixer, PrestaShop rules) |
 | `composer lint:fix` | Fixes code style |
-| `composer stan` | Runs static analysis (PHPStan, PHP 8.1 target) |
+| `composer stan` | Runs static analysis (PHPStan, PHP 8.1 target) in Docker |
 | `composer test` | Runs unit tests (PHPUnit) |
 
-`composer stan` uses PrestaShop's PHPStan extension. It needs `_PS_ROOT_DIR_` set to the path of a PrestaShop installation, so it can load PrestaShop classes:
+`composer stan` needs Docker. It runs PHPStan inside the official `prestashop/prestashop` image, so PHPStan can check the module against PrestaShop's core classes. The module is mounted read-only at `modules/pensopay`. By default it checks against PrestaShop 8.1, the oldest supported version. To check another version:
 
 ```bash
-_PS_ROOT_DIR_=/path/to/prestashop composer stan
+PS_VERSION=9.0 composer stan
 ```
+
+The first run downloads the image (about 2 GB per PrestaShop version). Run `composer install` on your machine first, because the container uses the module's `vendor/`.
 
 Every folder (except `vendor/` and `tests/`) needs an `index.php` that blocks directory listing. When you add a folder, copy the root `index.php` into it.
 
