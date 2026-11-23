@@ -1,0 +1,33 @@
+# Composer
+/vendor/
+
+# PrestaShop generated files
+/config.xml
+/config_*.xml
+/cache/
+
+# Tooling caches
+.php-cs-fixer.cache
+.php_cs.cache
+.phpunit.result.cache
+.phpunit.cache/
+/coverage/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+*.zip
+/build/
+
+# Logs
+*.log
+
+# IDE and OS files
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
