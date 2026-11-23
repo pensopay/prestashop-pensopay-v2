@@ -1,0 +1,12 @@
+includes:
+  - vendor/prestashop/php-dev-tools/phpstan/ps-module-extension.neon
+
+parameters:
+  phpVersion: 80100
+  level: 5
+  paths:
+    - src
+    - controllers
+    - upgrade
+  excludePaths:
+    - vendor
