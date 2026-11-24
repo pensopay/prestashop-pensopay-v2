@@ -5,6 +5,7 @@ parameters:
   phpVersion: 80100
   level: 8
   paths:
+    - pensopay.php
     - src
     - controllers
     - upgrade

@@ -1,6 +1,9 @@
 # Composer
 /vendor/
 
+# PrestaShop core source copied for editor autocompletion (make ide-source)
+/.prestashop/
+
 # PrestaShop generated files
 /config.xml
 /config_*.xml

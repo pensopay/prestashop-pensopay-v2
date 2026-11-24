@@ -1,0 +1,123 @@
+# Local development shops for every supported PrestaShop version.
+#
+#   docker compose --profile ps81 up -d    (or: make up V=81)
+#
+# See "Local environments" in README.md.
+#
+# The passwords below are fixed, throwaway values for local development only.
+# Never reuse them anywhere else. Ports are bound to 127.0.0.1 only.
+
+name: pensopay
+
+x-db: &db
+  image: mariadb:10.11.19
+  environment:
+    MARIADB_ROOT_PASSWORD: prestashop
+    # The PrestaShop installer does not create the database, so MariaDB does.
+    MARIADB_DATABASE: prestashop
+  healthcheck:
+    test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+    interval: 5s
+    timeout: 5s
+    retries: 20
+
+x-shop-env: &shop-env
+  PS_INSTALL_AUTO: 1
+  PS_DEV_MODE: 1
+  PS_ENABLE_SSL: 0
+  PS_LANGUAGE: en
+  PS_COUNTRY: DK
+  PS_FOLDER_ADMIN: admin-dev
+  PS_FOLDER_INSTALL: install-dev
+  ADMIN_MAIL: demo@prestashop.com
+  ADMIN_PASSWD: prestashop_demo
+  DB_USER: root
+  DB_PASSWD: prestashop
+  DB_NAME: prestashop
+
+services:
+  # PrestaShop 8.1 (PHP 8.1) - http://localhost:8081
+  ps81:
+    image: prestashop/prestashop:8.1.7-8.1-apache
+    profiles: [ps81]
+    environment:
+      <<: *shop-env
+      PS_DOMAIN: localhost:8081
+      DB_SERVER: db81
+    ports: ["127.0.0.1:8081:80"]
+    volumes:
+      - ps81_html:/var/www/html
+      - ./:/var/www/html/modules/pensopay
+    depends_on:
+      db81: { condition: service_healthy }
+  db81:
+    <<: *db
+    profiles: [ps81]
+    volumes: [ps81_db:/var/lib/mysql]
+
+  # PrestaShop 8.2 (PHP 8.1) - http://localhost:8082
+  ps82:
+    image: prestashop/prestashop:8.2.9-8.1-apache
+    profiles: [ps82]
+    environment:
+      <<: *shop-env
+      PS_DOMAIN: localhost:8082
+      DB_SERVER: db82
+    ports: ["127.0.0.1:8082:80"]
+    volumes:
+      - ps82_html:/var/www/html
+      - ./:/var/www/html/modules/pensopay
+    depends_on:
+      db82: { condition: service_healthy }
+  db82:
+    <<: *db
+    profiles: [ps82]
+    volumes: [ps82_db:/var/lib/mysql]
+
+  # PrestaShop 9.0 (PHP 8.4) - http://localhost:8090
+  ps90:
+    image: prestashop/prestashop:9.0.3-3.0-classic-8.4-apache
+    profiles: [ps90]
+    environment:
+      <<: *shop-env
+      PS_DOMAIN: localhost:8090
+      DB_SERVER: db90
+    ports: ["127.0.0.1:8090:80"]
+    volumes:
+      - ps90_html:/var/www/html
+      - ./:/var/www/html/modules/pensopay
+    depends_on:
+      db90: { condition: service_healthy }
+  db90:
+    <<: *db
+    profiles: [ps90]
+    volumes: [ps90_db:/var/lib/mysql]
+
+  # PrestaShop 9.2 (PHP 8.4) - http://localhost:8092
+  ps92:
+    image: prestashop/prestashop:9.2.1-6.1-classic-8.4-apache
+    profiles: [ps92]
+    environment:
+      <<: *shop-env
+      PS_DOMAIN: localhost:8092
+      DB_SERVER: db92
+    ports: ["127.0.0.1:8092:80"]
+    volumes:
+      - ps92_html:/var/www/html
+      - ./:/var/www/html/modules/pensopay
+    depends_on:
+      db92: { condition: service_healthy }
+  db92:
+    <<: *db
+    profiles: [ps92]
+    volumes: [ps92_db:/var/lib/mysql]
+
+volumes:
+  ps81_html:
+  ps81_db:
+  ps82_html:
+  ps82_db:
+  ps90_html:
+  ps90_db:
+  ps92_html:
+  ps92_db:
