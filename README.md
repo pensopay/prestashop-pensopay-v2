@@ -8,9 +8,11 @@ Under development.
 
 ## Requirements
 
-- PrestaShop
-- PHP
+- PrestaShop 8.1.0 or later
+- PHP 8.1 or later
 - A Pensopay account and API key
+
+On PHP below 8.1 the module refuses to install and shows the PHP version it needs. If it is already installed, the module list shows a warning, and it can still be uninstalled.
 
 ## Installation
 
@@ -40,6 +42,20 @@ PS_VERSION=9.0 composer stan
 ```
 
 The first run downloads the image (about 2 GB per PrestaShop version). Run `composer install` on your machine first, because the container uses the module's `vendor/`.
+
+### Code conventions
+
+- [pensopay.php](pensopay.php) must stay parseable on PHP 7.2. PrestaShop 8.x runs on PHP 7.2+ and loads this file to build the module list, so a parse error there would break the back office before the PHP version check could run. Scalar parameter and return types are fine. Typed properties, arrow functions, `??=`, union types, `mixed`, enums, `readonly`, `match`, `?->`, named arguments, constructor promotion and attributes are not. Put modern code in `src/`, which loads only on PHP 8.1+. CI checks this with `php -l` on PHP 7.2.
+
+- Every PHP file in `src/` starts with the direct-access guard right after its `namespace` line:
+
+  ```php
+  if (!defined('_PS_VERSION_')) {
+      exit;
+  }
+  ```
+
+  Unit tests run without PrestaShop, so [tests/bootstrap.php](tests/bootstrap.php) defines `_PS_VERSION_` before loading the autoloader.
 
 ### Local environments
 
@@ -113,7 +129,12 @@ Each job runs these steps in order. A job fails as soon as one step fails:
 1. `composer lint`
 2. `composer test`
 3. `composer stan`, against the job's PrestaShop image
-4. Starts the matching shop from `docker-compose.yml`, installs the module with the PrestaShop console, then uninstalls it. Each step is checked in the database, because PrestaShop 8.1's console exits with status 0 even when an install fails.
+4. Starts the matching shop from `docker-compose.yml`, installs the module with the PrestaShop console, checks that all its hooks are registered, then uninstalls it and checks that no hook registrations remain. Each step is checked in the database, because PrestaShop 8.1's console exits with status 0 even when an install fails.
+
+Two more jobs cover servers on PHP below 8.1:
+
+- **Syntax check on PHP 7.2** runs `php -l pensopay.php`, so the main module file still parses on the oldest PHP that PrestaShop 8.1 runs on.
+- **PS 8.1 / PHP 7.4 (install refused)** starts a PrestaShop 8.1 shop on PHP 7.4 (`8.1.7-7.4-apache`). It checks that the module loads without a fatal error and that install is refused with the "requires PHP 8.1" message.
 
 The **CI result** check passes only when every job passes. Branch protection on `main` and `staging` requires this check, so the protection rule stays the same when the matrix changes.
 
@@ -127,6 +148,12 @@ To check a specific PHP version, also set the image tag. This command starts a f
 
 ```bash
 PS92_TAG=9.2.1-6.1-classic-8.5-apache COMPOSE_PROJECT_NAME=pensopay-smoke make smoke V=92
+```
+
+To run the PHP 7.4 check locally (stop your local 8.1 shop first with `make down V=81`):
+
+```bash
+PS81_TAG=8.1.7-7.4-apache EXPECT_INSTALL_FAILURE=1 COMPOSE_PROJECT_NAME=pensopay-smoke make smoke V=81
 ```
 
 The check refuses to run if the module is already installed in the shop, so it never uninstalls a module you have set up. When you are done, delete the shop and its data with `COMPOSE_PROJECT_NAME=pensopay-smoke docker compose --profile ps92 down -v`.

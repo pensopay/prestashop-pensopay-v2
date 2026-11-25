@@ -4,6 +4,9 @@
 # from docker-compose.yml and installs and uninstalls the module
 # (.github/scripts/module-smoke-test.sh).
 #
+# Two more jobs cover PHP below 8.1: a syntax check of pensopay.php on PHP 7.2,
+# and a PS 8.1 / PHP 7.4 shop where install must be refused.
+#
 # Branch protection requires the "CI result" job only, so adding or removing
 # matrix rows does not need a change to the protection rule.
 #
@@ -26,6 +29,26 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # PrestaShop 8.x runs on PHP 7.2+ and includes pensopay.php to build the
+  # module list. The file must parse there, so the PHP version check inside it
+  # can run and show an error instead of a fatal parse error.
+  syntax-legacy-php:
+    name: Syntax check on PHP 7.2
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: php -l on PHP 7.2
+        # php:7.2-cli, pinned by digest. PHP 7.2 is end of life, so the image no longer changes.
+        run: >-
+          docker run --rm -v "$PWD":/app:ro -w /app
+          php:7.2-cli@sha256:42ffbc0798e4449bbd1e14fc4dcb87774aa1ad1900a09ef6a965bc0880aa2161
+          php -l pensopay.php
+
   test:
     name: PS ${{ matrix.ps }} / PHP ${{ matrix.php }}
     runs-on: ubuntu-24.04
@@ -93,15 +116,67 @@ jobs:
         if: always()
         run: docker compose --profile "$SERVICE" down -v
 
+  # PrestaShop 8.1 on PHP 7.4: the module page must still load, and install
+  # must be refused with the "requires PHP 8.1" message. Only the shop runs
+  # PHP 7.4. The runner uses PHP 8.1 so `composer install` works, and the shop
+  # mounts the module with its vendor/ directory. Lint, unit tests and PHPStan
+  # run in the `test` job.
+  smoke-legacy-php:
+    name: PS 8.1 / PHP 7.4 (install refused)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SERVICE: ps81
+      PS81_TAG: 8.1.7-7.4-apache
+      EXPECT_INSTALL_FAILURE: '1'
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP 8.1
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: composer:v2
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist --no-dev
+
+      - name: Check that install is refused on PHP 7.4
+        run: .github/scripts/module-smoke-test.sh "$SERVICE"
+
+      - name: Stop the shop
+        if: always()
+        run: docker compose --profile "$SERVICE" down -v
+
   result:
     name: CI result
-    needs: test
+    needs: [syntax-legacy-php, test, smoke-legacy-php]
     if: always()
     runs-on: ubuntu-24.04
     steps:
-      - name: Check that every matrix job passed
+      - name: Check that every job passed
         env:
-          RESULT: ${{ needs.test.result }}
+          SYNTAX_RESULT: ${{ needs.syntax-legacy-php.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          LEGACY_RESULT: ${{ needs.smoke-legacy-php.result }}
         run: |
-          echo "Matrix result: $RESULT"
-          [ "$RESULT" = "success" ]
+          echo "PHP 7.2 syntax check: $SYNTAX_RESULT"
+          echo "Matrix result: $TEST_RESULT"
+          echo "PHP 7.4 install refused: $LEGACY_RESULT"
+          [ "$SYNTAX_RESULT" = "success" ] && [ "$TEST_RESULT" = "success" ] && [ "$LEGACY_RESULT" = "success" ]

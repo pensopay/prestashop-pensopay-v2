@@ -16,6 +16,10 @@ declare(strict_types=1);
 
 namespace PensoPay\PrestaShop\Api;
 
+if (!defined('_PS_VERSION_')) {
+    exit;
+}
+
 /**
  * Version of the Pensopay API that the module targets.
  */
