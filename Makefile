@@ -9,7 +9,7 @@ COMPOSE = docker compose --profile ps$(V)
 IDE_V ?= 81
 IDE_DIR = .prestashop
 
-.PHONY: up down logs reset shell ide-source
+.PHONY: up down logs reset shell smoke ide-source
 
 up: ## Start the shop (installs it on first start)
 	$(COMPOSE) up -d
@@ -26,6 +26,9 @@ reset: ## Delete the shop and its database, so the next start is a clean install
 
 shell: ## Open a shell in the shop container
 	$(COMPOSE) exec ps$(V) bash
+
+smoke: ## Install and uninstall the module in the shop and check both (same as CI)
+	.github/scripts/module-smoke-test.sh ps$(V)
 
 ide-source: ## Copy PrestaShop core source into .prestashop/ so the editor knows core classes
 	@image=$$(docker compose --profile ps$(IDE_V) config --images | grep '^prestashop/'); \

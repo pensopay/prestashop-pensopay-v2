@@ -63,6 +63,7 @@ Run `composer install` first, because the module loads `vendor/autoload.php`.
 | Stop a shop (keeps data) | `make down V=81` | `docker compose --profile ps81 down` |
 | Reset a shop to a clean install | `make reset V=81` | `docker compose --profile ps81 down` then `docker volume rm pensopay_ps81_html pensopay_ps81_db` |
 | Open a shell in the shop | `make shell V=81` | `docker compose --profile ps81 exec ps81 bash` |
+| Install and uninstall the module and check both (the CI smoke test) | `make smoke V=81` | `.github/scripts/module-smoke-test.sh ps81` |
 
 The first start downloads the image and installs the shop with demo data, which takes a few minutes. The shop is ready when the logs show Apache starting. Later starts are fast.
 
@@ -75,6 +76,8 @@ docker compose --profile ps81 exec ps81 php bin/console prestashop:module instal
 ```
 
 The shops listen on `127.0.0.1` only, and all image tags are pinned to exact versions.
+
+To run a shop on a different PHP version, override its image tag with `PS81_TAG`, `PS82_TAG`, `PS90_TAG` or `PS92_TAG`, for example `PS92_TAG=9.2.1-6.1-classic-8.5-apache make up V=92`. CI uses this to test each PHP version. Run `make reset` first, because the shop's files live in a volume that was created from the previous image.
 
 ### Editor autocompletion
 
@@ -91,6 +94,44 @@ Your editor may not index a hidden folder on its own, so add it to your editor's
 Every folder (except `vendor/` and `tests/`) needs an `index.php` that blocks directory listing. When you add a folder, copy the root `index.php` into it.
 
 Development tools are installed under `require-dev` only. Build release zips with `composer install --no-dev`.
+
+## CI
+
+GitHub Actions ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on every pull request and on pushes to `main` and `staging`. It tests each supported combination of PrestaShop and PHP:
+
+| PrestaShop | PHP | Image (`prestashop/prestashop:`) |
+|---|---|---|
+| 8.1 | 8.1 | `8.1.7-8.1-apache` |
+| 8.2 | 8.1 | `8.2.9-8.1-apache` |
+| 9.0 | 8.1, 8.4 | `9.0.3-3.0-classic-8.1-apache`, `9.0.3-3.0-classic-8.4-apache` |
+| 9.2 | 8.1, 8.4, 8.5 | `9.2.1-6.1-classic-8.1-apache`, `…-8.4-apache`, `…-8.5-apache` |
+
+PrestaShop 9.0 supports PHP up to 8.4, and no PHP 8.5 image exists for it. PHP 8.5 is tested on 9.2 only.
+
+Each job runs these steps in order. A job fails as soon as one step fails:
+
+1. `composer lint`
+2. `composer test`
+3. `composer stan`, against the job's PrestaShop image
+4. Starts the matching shop from `docker-compose.yml`, installs the module with the PrestaShop console, then uninstalls it. Each step is checked in the database, because PrestaShop 8.1's console exits with status 0 even when an install fails.
+
+The **CI result** check passes only when every job passes. Branch protection on `main` and `staging` requires this check, so the protection rule stays the same when the matrix changes.
+
+To run the install check locally, run `composer install` first, then:
+
+```bash
+make smoke V=81
+```
+
+To check a specific PHP version, also set the image tag. This command starts a fresh shop, so your existing local shop and its data are not touched. Stop your local shop for that version first (`make down V=92`), because both use the same port:
+
+```bash
+PS92_TAG=9.2.1-6.1-classic-8.5-apache COMPOSE_PROJECT_NAME=pensopay-smoke make smoke V=92
+```
+
+The check refuses to run if the module is already installed in the shop, so it never uninstalls a module you have set up. When you are done, delete the shop and its data with `COMPOSE_PROJECT_NAME=pensopay-smoke docker compose --profile ps92 down -v`.
+
+All third-party actions are pinned to a full commit SHA. Dependabot opens a pull request each week to update them. The workflow uses no secrets.
 
 ## Features
 

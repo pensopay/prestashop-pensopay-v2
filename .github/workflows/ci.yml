@@ -1,0 +1,107 @@
+# Tests the module on every supported PrestaShop and PHP combination.
+#
+# Each job runs lint, unit tests and PHPStan, then starts the matching shop
+# from docker-compose.yml and installs and uninstalls the module
+# (.github/scripts/module-smoke-test.sh).
+#
+# Branch protection requires the "CI result" job only, so adding or removing
+# matrix rows does not need a change to the protection rule.
+#
+# Third-party actions are pinned to full commit SHAs. Dependabot keeps them
+# up to date (.github/dependabot.yml).
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, staging]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Cancel superseded runs on pull requests, but test every push to main and staging.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: PS ${{ matrix.ps }} / PHP ${{ matrix.php }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { ps: '8.1', php: '8.1', service: ps81, tag: 8.1.7-8.1-apache }
+          - { ps: '8.2', php: '8.1', service: ps82, tag: 8.2.9-8.1-apache }
+          # PrestaShop 9.0 images go up to PHP 8.4. There is no 8.5 image.
+          - { ps: '9.0', php: '8.1', service: ps90, tag: 9.0.3-3.0-classic-8.1-apache }
+          - { ps: '9.0', php: '8.4', service: ps90, tag: 9.0.3-3.0-classic-8.4-apache }
+          - { ps: '9.2', php: '8.1', service: ps92, tag: 9.2.1-6.1-classic-8.1-apache }
+          - { ps: '9.2', php: '8.4', service: ps92, tag: 9.2.1-6.1-classic-8.4-apache }
+          - { ps: '9.2', php: '8.5', service: ps92, tag: 9.2.1-6.1-classic-8.5-apache }
+    env:
+      SERVICE: ${{ matrix.service }}
+      PS_IMAGE_TAG: ${{ matrix.tag }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Lint
+        run: composer lint
+
+      - name: Unit tests
+        run: composer test
+
+      - name: PHPStan
+        run: PS_VERSION="$PS_IMAGE_TAG" composer stan
+
+      - name: Select shop image
+        # docker-compose.yml reads the tag from PS81_TAG, PS82_TAG, PS90_TAG or PS92_TAG.
+        run: echo "PS${SERVICE#ps}_TAG=$PS_IMAGE_TAG" >> "$GITHUB_ENV"
+
+      - name: Install and uninstall the module
+        run: .github/scripts/module-smoke-test.sh "$SERVICE"
+
+      - name: Stop the shop
+        if: always()
+        run: docker compose --profile "$SERVICE" down -v
+
+  result:
+    name: CI result
+    needs: test
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check that every matrix job passed
+        env:
+          RESULT: ${{ needs.test.result }}
+        run: |
+          echo "Matrix result: $RESULT"
+          [ "$RESULT" = "success" ]

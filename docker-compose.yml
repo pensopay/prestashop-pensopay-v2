@@ -38,7 +38,7 @@ x-shop-env: &shop-env
 services:
   # PrestaShop 8.1 (PHP 8.1) - http://localhost:8081
   ps81:
-    image: prestashop/prestashop:8.1.7-8.1-apache
+    image: prestashop/prestashop:${PS81_TAG:-8.1.7-8.1-apache}
     profiles: [ps81]
     environment:
       <<: *shop-env
@@ -57,7 +57,7 @@ services:
 
   # PrestaShop 8.2 (PHP 8.1) - http://localhost:8082
   ps82:
-    image: prestashop/prestashop:8.2.9-8.1-apache
+    image: prestashop/prestashop:${PS82_TAG:-8.2.9-8.1-apache}
     profiles: [ps82]
     environment:
       <<: *shop-env
@@ -76,7 +76,7 @@ services:
 
   # PrestaShop 9.0 (PHP 8.4) - http://localhost:8090
   ps90:
-    image: prestashop/prestashop:9.0.3-3.0-classic-8.4-apache
+    image: prestashop/prestashop:${PS90_TAG:-9.0.3-3.0-classic-8.4-apache}
     profiles: [ps90]
     environment:
       <<: *shop-env
@@ -95,7 +95,7 @@ services:
 
   # PrestaShop 9.2 (PHP 8.4) - http://localhost:8092
   ps92:
-    image: prestashop/prestashop:9.2.1-6.1-classic-8.4-apache
+    image: prestashop/prestashop:${PS92_TAG:-9.2.1-6.1-classic-8.4-apache}
     profiles: [ps92]
     environment:
       <<: *shop-env
