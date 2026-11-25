@@ -1,11 +1,13 @@
 # Tests the module on every supported PrestaShop and PHP combination.
 #
-# Each job runs lint, unit tests and PHPStan, then starts the matching shop
-# from docker-compose.yml and installs and uninstalls the module
-# (.github/scripts/module-smoke-test.sh).
-#
-# Two more jobs cover PHP below 8.1: a syntax check of pensopay.php on PHP 7.2,
-# and a PS 8.1 / PHP 7.4 shop where install must be refused.
+#   checks  Runs once: lint, unit tests, and a syntax check of pensopay.php on
+#           PHP 7.2. Fast, so most mistakes fail here within a minute.
+#   smoke   One job per PrestaShop and PHP combination. Starts the matching
+#           shop from docker-compose.yml, then installs and uninstalls the
+#           module (.github/scripts/module-smoke-test.sh). The PHP 8.1 row of
+#           each PrestaShop version also runs PHPStan against that version.
+#           The PS 8.1 row then switches the same shop to PHP 7.4 to test the
+#           PHP version guard.
 #
 # Branch protection requires the "CI result" job only, so adding or removing
 # matrix rows does not need a change to the protection rule.
@@ -29,107 +31,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # PrestaShop 8.x runs on PHP 7.2+ and includes pensopay.php to build the
-  # module list. The file must parse there, so the PHP version check inside it
-  # can run and show an error instead of a fatal parse error.
-  syntax-legacy-php:
-    name: Syntax check on PHP 7.2
+  checks:
+    name: Lint, unit tests, PHP 7.2 syntax
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Check out code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: php -l on PHP 7.2
-        # php:7.2-cli, pinned by digest. PHP 7.2 is end of life, so the image no longer changes.
-        run: >-
-          docker run --rm -v "$PWD":/app:ro -w /app
-          php:7.2-cli@sha256:42ffbc0798e4449bbd1e14fc4dcb87774aa1ad1900a09ef6a965bc0880aa2161
-          php -l pensopay.php
-
-  test:
-    name: PS ${{ matrix.ps }} / PHP ${{ matrix.php }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { ps: '8.1', php: '8.1', service: ps81, tag: 8.1.7-8.1-apache }
-          - { ps: '8.2', php: '8.1', service: ps82, tag: 8.2.9-8.1-apache }
-          # PrestaShop 9.0 images go up to PHP 8.4. There is no 8.5 image.
-          - { ps: '9.0', php: '8.1', service: ps90, tag: 9.0.3-3.0-classic-8.1-apache }
-          - { ps: '9.0', php: '8.4', service: ps90, tag: 9.0.3-3.0-classic-8.4-apache }
-          - { ps: '9.2', php: '8.1', service: ps92, tag: 9.2.1-6.1-classic-8.1-apache }
-          - { ps: '9.2', php: '8.4', service: ps92, tag: 9.2.1-6.1-classic-8.4-apache }
-          - { ps: '9.2', php: '8.5', service: ps92, tag: 9.2.1-6.1-classic-8.5-apache }
-    env:
-      SERVICE: ${{ matrix.service }}
-      PS_IMAGE_TAG: ${{ matrix.tag }}
-
-    steps:
-      - name: Check out code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up PHP ${{ matrix.php }}
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
-        with:
-          php-version: ${{ matrix.php }}
-          coverage: none
-          tools: composer:v2
-
-      - name: Get Composer cache directory
-        id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Composer downloads
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.composer-cache.outputs.dir }}
-          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
-          restore-keys: composer-${{ runner.os }}-
-
-      - name: Install dependencies
-        run: composer install --no-interaction --no-progress --prefer-dist
-
-      - name: Lint
-        run: composer lint
-
-      - name: Unit tests
-        run: composer test
-
-      - name: PHPStan
-        run: PS_VERSION="$PS_IMAGE_TAG" composer stan
-
-      - name: Select shop image
-        # docker-compose.yml reads the tag from PS81_TAG, PS82_TAG, PS90_TAG or PS92_TAG.
-        run: echo "PS${SERVICE#ps}_TAG=$PS_IMAGE_TAG" >> "$GITHUB_ENV"
-
-      - name: Install and uninstall the module
-        run: .github/scripts/module-smoke-test.sh "$SERVICE"
-
-      - name: Stop the shop
-        if: always()
-        run: docker compose --profile "$SERVICE" down -v
-
-  # PrestaShop 8.1 on PHP 7.4: the module page must still load, and install
-  # must be refused with the "requires PHP 8.1" message. Only the shop runs
-  # PHP 7.4. The runner uses PHP 8.1 so `composer install` works, and the shop
-  # mounts the module with its vendor/ directory. Lint, unit tests and PHPStan
-  # run in the `test` job.
-  smoke-legacy-php:
-    name: PS 8.1 / PHP 7.4 (install refused)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    env:
-      SERVICE: ps81
-      PS81_TAG: 8.1.7-7.4-apache
-      EXPECT_INSTALL_FAILURE: '1'
-
+    timeout-minutes: 10
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -155,9 +60,87 @@ jobs:
           restore-keys: composer-${{ runner.os }}-
 
       - name: Install dependencies
-        run: composer install --no-interaction --no-progress --prefer-dist --no-dev
+        run: composer install --no-interaction --no-progress --prefer-dist
 
-      - name: Check that install is refused on PHP 7.4
+      - name: Lint
+        run: composer lint
+
+      - name: Unit tests
+        run: composer test
+
+      # PrestaShop 8.x runs on PHP 7.2+ and includes pensopay.php to build the
+      # module list. The file must parse there, so the PHP version check inside
+      # it can run and show an error instead of a fatal parse error.
+      - name: Syntax check of pensopay.php on PHP 7.2
+        # php:7.2-cli, pinned by digest. PHP 7.2 is end of life, so the image no longer changes.
+        run: >-
+          docker run --rm -v "$PWD":/app:ro -w /app
+          php:7.2-cli@sha256:42ffbc0798e4449bbd1e14fc4dcb87774aa1ad1900a09ef6a965bc0880aa2161
+          php -l pensopay.php
+
+  smoke:
+    name: PS ${{ matrix.ps }} / PHP ${{ matrix.php }}${{ matrix.legacy_php_tag && ' + PHP 7.4' || '' }}
+    # Skip the slow shop jobs when lint or unit tests already fail.
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { ps: '8.1', php: '8.1', service: ps81, tag: 8.1.7-8.1-apache, stan: true, legacy_php_tag: 8.1.7-7.4-apache }
+          - { ps: '8.2', php: '8.1', service: ps82, tag: 8.2.9-8.1-apache, stan: true }
+          # PrestaShop 9.0 images go up to PHP 8.4. There is no 8.5 image.
+          - { ps: '9.0', php: '8.1', service: ps90, tag: 9.0.3-3.0-classic-8.1-apache, stan: true }
+          - { ps: '9.0', php: '8.4', service: ps90, tag: 9.0.3-3.0-classic-8.4-apache }
+          - { ps: '9.2', php: '8.1', service: ps92, tag: 9.2.1-6.1-classic-8.1-apache, stan: true }
+          - { ps: '9.2', php: '8.4', service: ps92, tag: 9.2.1-6.1-classic-8.4-apache }
+          - { ps: '9.2', php: '8.5', service: ps92, tag: 9.2.1-6.1-classic-8.5-apache }
+    env:
+      SERVICE: ${{ matrix.service }}
+      PS_IMAGE_TAG: ${{ matrix.tag }}
+      LEGACY_PHP_TAG: ${{ matrix.legacy_php_tag }}
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The runner only runs Composer, so it always uses PHP 8.1. PHPStan and
+      # the shop run inside the PrestaShop image with the row's PHP version.
+      - name: Set up PHP 8.1
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.1'
+          coverage: none
+          tools: composer:v2
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      # PHPStan targets PHP 8.1 (phpVersion in phpstan.neon.dist), so the
+      # result depends only on the PrestaShop version. It runs once per version.
+      - name: PHPStan
+        if: matrix.stan
+        run: PS_VERSION="$PS_IMAGE_TAG" composer stan
+
+      - name: Select shop image
+        # docker-compose.yml reads the tag from PS81_TAG, PS82_TAG, PS90_TAG or PS92_TAG.
+        run: echo "PS${SERVICE#ps}_TAG=$PS_IMAGE_TAG" >> "$GITHUB_ENV"
+
+      - name: Install and uninstall the module
         run: .github/scripts/module-smoke-test.sh "$SERVICE"
 
       - name: Stop the shop
@@ -166,17 +149,15 @@ jobs:
 
   result:
     name: CI result
-    needs: [syntax-legacy-php, test, smoke-legacy-php]
+    needs: [checks, smoke]
     if: always()
     runs-on: ubuntu-24.04
     steps:
       - name: Check that every job passed
         env:
-          SYNTAX_RESULT: ${{ needs.syntax-legacy-php.result }}
-          TEST_RESULT: ${{ needs.test.result }}
-          LEGACY_RESULT: ${{ needs.smoke-legacy-php.result }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
         run: |
-          echo "PHP 7.2 syntax check: $SYNTAX_RESULT"
-          echo "Matrix result: $TEST_RESULT"
-          echo "PHP 7.4 install refused: $LEGACY_RESULT"
-          [ "$SYNTAX_RESULT" = "success" ] && [ "$TEST_RESULT" = "success" ] && [ "$LEGACY_RESULT" = "success" ]
+          echo "Checks: $CHECKS_RESULT"
+          echo "Smoke matrix: $SMOKE_RESULT"
+          [ "$CHECKS_RESULT" = "success" ] && [ "$SMOKE_RESULT" = "success" ]
