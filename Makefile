@@ -9,7 +9,14 @@ COMPOSE = docker compose --profile ps$(V)
 IDE_V ?= 81
 IDE_DIR = .prestashop
 
-.PHONY: up down logs reset shell smoke ide-source
+.PHONY: help up down logs reset shell smoke ide-source
+.DEFAULT_GOAL := help
+
+help: ## List the available targets
+	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) \
+		| awk 'BEGIN { FS = ":.*## " } { printf "  %-12s %s\n", $$1, $$2 }'
+	@echo
+	@echo "Select the PrestaShop version with V=81, 82, 90 or 92 (default 81)."
 
 up: ## Start the shop (installs it on first start)
 	$(COMPOSE) up -d

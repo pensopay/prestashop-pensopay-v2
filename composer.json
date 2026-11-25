@@ -30,7 +30,7 @@
     "lint:fix": "php-cs-fixer fix",
     "stan": [
       "Composer\\Config::disableProcessTimeout",
-      "docker run --rm -v \"$PWD\":/var/www/html/modules/pensopay:ro -w /var/www/html/modules/pensopay -e _PS_ROOT_DIR_=/var/www/html --entrypoint php prestashop/prestashop:${PS_VERSION:-8.1} vendor/bin/phpstan analyse --memory-limit=1G"
+      "docker run --rm -v \"$PWD\":/var/www/html/modules/pensopay:ro -w /var/www/html/modules/pensopay -e _PS_ROOT_DIR_=/var/www/html --entrypoint php prestashop/prestashop:${PS_VERSION:-8.1.7-8.1-apache} vendor/bin/phpstan analyse --memory-limit=1G"
     ],
     "test": "phpunit"
   },

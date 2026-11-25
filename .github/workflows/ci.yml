@@ -1,7 +1,7 @@
 # Tests the module on every supported PrestaShop and PHP combination.
 #
-#   checks  Runs once: lint, unit tests, and a syntax check of pensopay.php on
-#           PHP 7.2. Fast, so most mistakes fail here within a minute.
+#   checks  Runs once: lint, unit tests, and a syntax check of pensopay.php and
+#           upgrade/ on PHP 7.2. Fast, so most mistakes fail here within a minute.
 #   smoke   One job per PrestaShop and PHP combination. Starts the matching
 #           shop from docker-compose.yml, then installs and uninstalls the
 #           module (.github/scripts/module-smoke-test.sh). The PHP 8.1 row of
@@ -70,13 +70,17 @@ jobs:
 
       # PrestaShop 8.x runs on PHP 7.2+ and includes pensopay.php to build the
       # module list. The file must parse there, so the PHP version check inside
-      # it can run and show an error instead of a fatal parse error.
-      - name: Syntax check of pensopay.php on PHP 7.2
+      # it can run and show an error instead of a fatal parse error. The same
+      # goes for upgrade/ scripts, which PrestaShop includes when the module
+      # version changes, even on a server still running old PHP.
+      # PHP 7.2's `php -l` takes one file at a time, hence the loop.
+      # upgrade/index.php makes sure the glob always matches.
+      - name: Syntax check of pensopay.php and upgrade/ on PHP 7.2
         # php:7.2-cli, pinned by digest. PHP 7.2 is end of life, so the image no longer changes.
         run: >-
           docker run --rm -v "$PWD":/app:ro -w /app
           php:7.2-cli@sha256:42ffbc0798e4449bbd1e14fc4dcb87774aa1ad1900a09ef6a965bc0880aa2161
-          php -l pensopay.php
+          sh -c 'for f in pensopay.php upgrade/*.php; do php -l "$f" || exit 1; done'
 
   smoke:
     name: PS ${{ matrix.ps }} / PHP ${{ matrix.php }}${{ matrix.legacy_php_tag && ' + PHP 7.4' || '' }}
@@ -135,6 +139,12 @@ jobs:
       - name: PHPStan
         if: matrix.stan
         run: PS_VERSION="$PS_IMAGE_TAG" composer stan
+
+      # The shop should load the same vendor/ a release zip contains, so a
+      # src/ class that depends on a dev package fails here, not in production.
+      # PHPStan above still had the dev dependencies.
+      - name: Remove dev dependencies
+        run: composer install --no-dev --no-interaction --no-progress --prefer-dist
 
       - name: Select shop image
         # docker-compose.yml reads the tag from PS81_TAG, PS82_TAG, PS90_TAG or PS92_TAG.
