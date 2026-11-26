@@ -1,5 +1,4 @@
 <?php
-
 /**
  * NOTICE OF LICENSE
  *
@@ -12,6 +11,8 @@
  * @copyright Since 2026 Pensopay
  * @license   https://opensource.org/licenses/AFL-3.0 Academic Free License version 3.0
  */
+use PrestaShop\PrestaShop\Core\Payment\PaymentOption;
+
 if (!defined('_PS_VERSION_')) {
     exit;
 }
@@ -99,7 +100,7 @@ class Pensopay extends PaymentModule
     /**
      * @param array<string, mixed> $params
      *
-     * @return PrestaShop\PrestaShop\Core\Payment\PaymentOption[]
+     * @return PaymentOption[]
      */
     public function hookPaymentOptions(array $params): array
     {

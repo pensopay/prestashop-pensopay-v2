@@ -34,6 +34,7 @@ MAIN_FILE="${MODULE}.php"
 # Top-level paths that go into the zip.
 RUNTIME_PATHS=(
   "$MAIN_FILE"
+  .htaccess
   index.php
   logo.png
   LICENSE
@@ -166,8 +167,9 @@ rm -f "$STAGE_DIR/composer.json" "$STAGE_DIR/composer.lock"
 # --- Clean up and protect vendor/ --------------------------------------------
 
 # Dot files and folders (.git, .github, .gitignore, .php-cs-fixer.dist.php, ...),
-# including any inside vendor packages.
-find "$STAGE_DIR" -mindepth 1 -name '.*' -prune -exec rm -rf {} +
+# including any inside vendor packages. .htaccess files are kept: they block
+# direct requests, and the PrestaShop validator requires one in the root.
+find "$STAGE_DIR" -mindepth 1 -name '.*' ! -name .htaccess -prune -exec rm -rf {} +
 
 # vendor/ is never served directly. Same rules as PrestaShop's own vendor/.htaccess.
 cat >"$STAGE_DIR/vendor/.htaccess" <<'HTACCESS'
@@ -203,6 +205,11 @@ echo "OK: every folder has an index.php."
 
 missing_license=()
 while IFS= read -r -d '' file; do
+  # The validator wants the license docblock on the line right after <?php.
+  if [[ "$file" == *.php ]] && [ "$(sed -n 2p "$file")" != "/**" ]; then
+    missing_license+=("${file#"$STAGE_DIR"/} (line 2 must be '/**', right after <?php)")
+    continue
+  fi
   header="$(head -n "$LICENSE_HEADER_LINES" "$file")"
   for marker in "${LICENSE_MARKERS[@]}"; do
     if ! grep -qF "$marker" <<<"$header"; then
