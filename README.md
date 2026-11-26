@@ -90,7 +90,20 @@ Branch protection requires only the **CI result** check, which passes when every
 
 ### Releases
 
-Build release zips with `composer install --no-dev`. Development files are marked `export-ignore` in [.gitattributes](.gitattributes).
+Set `$this->version` in [pensopay.php](pensopay.php), then build the zip:
+
+```bash
+bin/build.sh 2.0.0     # or: make build VERSION=2.0.0
+```
+
+This writes `build/pensopay-2.0.0.zip` with a top-level `pensopay/` folder. Without a version, the script uses the git tag on HEAD (`v2.0.0` or `2.0.0`). It copies only the runtime files tracked by git, installs production dependencies with `composer install --no-dev --optimize-autoloader` in the build folder (your own `vendor/` is left alone), removes dot files, and adds `index.php` and an `.htaccess` to `vendor/`.
+
+The build fails if:
+
+- the version in `pensopay.php` does not match the release version,
+- a folder has no `index.php`,
+- a PHP, JS, CSS or template file outside `vendor/` has no license header,
+- a new top-level file or folder is not listed in `RUNTIME_PATHS` or `DEV_PATHS` in [bin/build.sh](bin/build.sh). Add it to one of the two lists to choose whether it goes in the zip.
 
 ## License
 

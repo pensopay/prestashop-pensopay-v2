@@ -7,4 +7,5 @@
 /phpstan.neon.dist       export-ignore
 /phpunit.xml.dist        export-ignore
 /Makefile                export-ignore
+/bin                     export-ignore
 /docker-compose.yml      export-ignore
