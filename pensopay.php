@@ -35,6 +35,8 @@ class Pensopay extends PaymentModule
     private const MIN_PHP_VERSION_ID = 80100;
     private const MIN_PHP_VERSION = '8.1';
 
+    private const CONFIG_API_KEY = 'PENSOPAY_API_KEY';
+
     /**
      * Hooks registered on install.
      */
@@ -50,7 +52,7 @@ class Pensopay extends PaymentModule
     {
         $this->name = 'pensopay';
         $this->tab = 'payments_gateways';
-        $this->version = '0.1.0';
+        $this->version = '0.1.2';
         $this->author = 'Pensopay A/S';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = ['min' => '8.1.0', 'max' => _PS_VERSION_];
@@ -104,11 +106,26 @@ class Pensopay extends PaymentModule
      */
     public function hookPaymentOptions(array $params): array
     {
-        if (!self::isPhpVersionSupported()) {
+        // Without an API key no payment can be created, so the option is not offered.
+        if (!self::isPhpVersionSupported() || !$this->active || !Configuration::get(self::CONFIG_API_KEY)) {
             return [];
         }
 
-        return [];
+        // PrestaShop 9.2 types $this->context as nullable, older versions do not.
+        // The @var gives PHPStan the same type on every version.
+        /** @var Context|null $context */
+        $context = $this->context;
+        $link = $context instanceof Context ? $context->link : null;
+        if ($link === null) {
+            return [];
+        }
+
+        $option = new PaymentOption();
+        $option->setModuleName((string) $this->name)
+            ->setCallToActionText($this->trans('Pay with Pensopay', [], 'Modules.Pensopay.Shop'))
+            ->setAction($link->getModuleLink((string) $this->name, 'payment', [], true));
+
+        return [$option];
     }
 
     /**
@@ -156,13 +173,13 @@ class Pensopay extends PaymentModule
     }
 
     /**
-     * Configuration keys owned by the module; deleted on uninstall. Empty for now.
+     * Configuration keys owned by the module; deleted on uninstall.
      *
      * @return string[]
      */
     private static function getConfigurationKeys(): array
     {
-        return [];
+        return [self::CONFIG_API_KEY];
     }
 
     private static function isPhpVersionSupported(): bool
