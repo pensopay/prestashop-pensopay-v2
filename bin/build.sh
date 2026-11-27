@@ -2,11 +2,14 @@
 #
 # Builds the release zip for the PrestaShop module.
 #
+#   bin/build.sh              (or: make build)
 #   bin/build.sh 2.0.0        (or: make build VERSION=2.0.0)
+#   bin/build.sh --force      (or: make build FORCE=1)
 #
 # Writes build/pensopay-<version>.zip, with a top-level pensopay/ folder as
-# PrestaShop requires. Without an argument, the version is taken from a git
-# tag on HEAD (v2.0.0 or 2.0.0).
+# PrestaShop requires. The version is $this->version in pensopay.php. A version
+# argument is optional and only checked against it. If the zip already exists,
+# the script asks before overwriting it; --force skips the question.
 #
 # Steps:
 #   1. Copy the runtime files (RUNTIME_PATHS) into build/pensopay/. Only files
@@ -24,7 +27,7 @@
 #     so a new folder is never left out of the zip by accident,
 #   - any folder is missing an index.php,
 #   - any PHP, JS, CSS or template file outside vendor/ is missing the license header,
-#   - the version in pensopay.php does not match the release version.
+#   - a version argument or a git tag on HEAD does not match pensopay.php.
 
 set -euo pipefail
 
@@ -92,14 +95,37 @@ contains() {
   return 1
 }
 
+# --- Arguments ---------------------------------------------------------------
+
+FORCE="${FORCE:-0}"
+VERSION=""
+for arg in "$@"; do
+  case "$arg" in
+    -f | --force) FORCE=1 ;;
+    -*) fail "unknown option '$arg'. Usage: $0 [--force] [version]" ;;
+    *) VERSION="$arg" ;;
+  esac
+done
+
 # --- Release version ---------------------------------------------------------
 
-VERSION="${1:-}"
-if [ -z "$VERSION" ]; then
-  VERSION="$(git describe --tags --exact-match HEAD 2>/dev/null || true)"
-  VERSION="${VERSION#v}"
-  [ -n "$VERSION" ] || fail "no release version given and HEAD has no tag. Usage: $0 <version>, for example $0 2.0.0"
+# $this->version in pensopay.php is the source of truth. A version given on the
+# command line, or a git tag on HEAD, must match it.
+module_version="$(sed -nE "s/^[[:space:]]*\\\$this->version[[:space:]]*=[[:space:]]*'([^']+)'.*/\1/p" "$MAIN_FILE")"
+[ -n "$module_version" ] || fail "could not find \$this->version in $MAIN_FILE"
+
+if [ -n "$VERSION" ]; then
+  [ "$module_version" = "$VERSION" ] \
+    || fail "$MAIN_FILE has version '$module_version', but the release version is '$VERSION'. Update \$this->version in $MAIN_FILE."
+else
+  VERSION="$module_version"
 fi
+
+tag="$(git describe --tags --exact-match HEAD 2>/dev/null || true)"
+if [ -n "$tag" ] && [ "${tag#v}" != "$VERSION" ]; then
+  fail "HEAD is tagged '$tag', but $MAIN_FILE has version '$VERSION'."
+fi
+
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] \
   || fail "'$VERSION' is not a valid version. Use for example 2.0.0"
 
@@ -109,14 +135,18 @@ for tool in composer git zip; do
   command -v "$tool" >/dev/null || fail "'$tool' is not installed"
 done
 
+# Rebuilding the same version is normal while testing, so an existing zip is
+# replaced after a confirmation instead of requiring a version bump.
+if [ -e "$ZIP_PATH" ] && [ "$FORCE" != 1 ]; then
+  if [ -t 0 ]; then
+    read -r -p "${ZIP_PATH#"$ROOT"/} already exists. Overwrite it? [y/N] " answer
+    [[ "$answer" =~ ^[Yy]([Ee][Ss])?$ ]] || fail "cancelled, ${ZIP_PATH#"$ROOT"/} was not changed."
+  else
+    fail "${ZIP_PATH#"$ROOT"/} already exists. Run with --force (or make build FORCE=1) to overwrite it."
+  fi
+fi
+
 log "Building $MODULE $VERSION"
-
-# --- Version check -----------------------------------------------------------
-
-module_version="$(sed -nE "s/^[[:space:]]*\\\$this->version[[:space:]]*=[[:space:]]*'([^']+)'.*/\1/p" "$MAIN_FILE")"
-[ -n "$module_version" ] || fail "could not find \$this->version in $MAIN_FILE"
-[ "$module_version" = "$VERSION" ] \
-  || fail "$MAIN_FILE has version '$module_version', but the release version is '$VERSION'. Update \$this->version in $MAIN_FILE."
 echo "OK: $MAIN_FILE has version $VERSION."
 
 # --- Every top-level path is classified ---------------------------------------

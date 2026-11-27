@@ -37,8 +37,8 @@ shell: ## Open a shell in the shop container
 smoke: ## Install and uninstall the module in the shop and check both (same as CI)
 	.github/scripts/module-smoke-test.sh ps$(V)
 
-build: ## Build the release zip, e.g. make build VERSION=2.0.0 (default: the git tag on HEAD)
-	bin/build.sh $(VERSION)
+build: ## Build the release zip for the version in pensopay.php (FORCE=1 overwrites without asking)
+	bin/build.sh $(if $(filter 1,$(FORCE)),--force) $(VERSION)
 
 ide-source: ## Copy PrestaShop core source into .prestashop/ so the editor knows core classes
 	@image=$$(docker compose --profile ps$(IDE_V) config --images | grep '^prestashop/'); \
